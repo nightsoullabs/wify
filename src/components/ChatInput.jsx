@@ -7,18 +7,19 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
-  const [showMicFeedback, setShowMicFeedback] = useState(false);
+  const [showVoiceFeedback, setShowVoiceFeedback] = useState(false);
   const autoSubmitTimeoutRef = useRef(null);
   const speechRecognitionRef = useRef(null);
+  const continuousListeningRef = useRef(false);
   
-  // Enhanced microphone clap detection handler - always enabled
-  const handleMicClapDetected = () => {
-    console.log("🎯 Enhanced microphone clap detected!");
+  // Enhanced clap detection handler for wake functionality
+  const handleClapWake = () => {
+    console.log("🎯 Clap wake detected!");
     
-    if (!isProcessing && !isListening && hasVoiceSupport) {
-      // Show enhanced visual feedback
-      setShowMicFeedback(true);
-      setTimeout(() => setShowMicFeedback(false), 1000);
+    if (!isProcessing && hasVoiceSupport) {
+      // Show visual feedback
+      setShowVoiceFeedback(true);
+      setTimeout(() => setShowVoiceFeedback(false), 1000);
       
       // Add screen flash effect
       const flashOverlay = document.createElement('div');
@@ -28,7 +29,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(255, 215, 0, 0.3);
+        background-color: rgba(100, 149, 237, 0.3);
         z-index: 9998;
         pointer-events: none;
         animation: flashFade 0.5s ease-out;
@@ -43,10 +44,10 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
       
       // Activate voice recognition after a short delay
       setTimeout(() => {
-        console.log("🎤 Activating voice input via clap...");
-        toggleVoiceInput();
+        console.log("🎤 Activating voice input via clap wake...");
+        startVoiceInput();
         
-        // Play enhanced feedback sound
+        // Play feedback sound
         try {
           const audio = new Audio('/assets/sounds/activate.mp3');
           audio.volume = 0.6;
@@ -55,22 +56,14 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
           console.warn("Error with activation sound:", err);
         }
       }, 200);
-    } else {
-      console.log("⚠️ Clap detected but conditions not met:", {
-        isProcessing,
-        isListening,
-        hasVoiceSupport
-      });
     }
   };
   
-  // Use enhanced microphone clap detection - always enabled
+  // Use clap detection for wake functionality
   const { 
     isListening: isClapListening, 
-    permission: clapPermission,
-    adjustSensitivity,
-    clapSensitivity 
-  } = useMicClapDetection(handleMicClapDetected, true); // Always enabled
+    permission: clapPermission 
+  } = useMicClapDetection(handleClapWake, true);
 
   // Check if browser supports speech recognition
   useEffect(() => {
@@ -90,7 +83,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
     }
   };
 
-  const toggleVoiceInput = () => {
+  const startVoiceInput = () => {
     if (!hasVoiceSupport) {
       console.warn("⚠️ Voice input not supported");
       return;
@@ -98,103 +91,126 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
     
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
-    if (isListening) {
-      // Stop listening
-      if (speechRecognitionRef.current) {
-        speechRecognitionRef.current.stop();
-        speechRecognitionRef.current = null;
-      }
-      setIsListening(false);
-      console.log("🛑 Voice input stopped");
-    } else {
-      // Start listening
-      console.log("🎤 Starting voice input...");
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-      recognition.maxAlternatives = 1;
+    console.log("🎤 Starting voice input...");
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true; // Enable continuous listening
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+    
+    recognition.onstart = () => {
+      console.log("✅ Voice recognition started");
+      setIsListening(true);
+      continuousListeningRef.current = true;
+    };
+    
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0])
+        .map(result => result.transcript)
+        .join('');
       
-      recognition.onstart = () => {
-        console.log("✅ Voice recognition started");
-        setIsListening(true);
-      };
+      console.log("📝 Voice transcript:", transcript);
       
-      recognition.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
+      // Check for "Wify" wake word
+      const lowerTranscript = transcript.toLowerCase();
+      if (lowerTranscript.includes('wify') || lowerTranscript.includes('wifi')) {
+        console.log("🎯 Wify wake word detected!");
         
-        console.log("📝 Voice transcript:", transcript);
+        // Remove wake word from message and clean it up
+        let cleanedMessage = transcript
+          .replace(/wify|wifi/gi, '')
+          .trim();
         
-        // Check for "Wify" wake word
-        const lowerTranscript = transcript.toLowerCase();
-        if (lowerTranscript.includes('wify') || lowerTranscript.includes('wifi')) {
-          console.log("🎯 Wify wake word detected!");
-          
-          // Remove wake word from message and clean it up
-          let cleanedMessage = transcript
-            .replace(/wify|wifi/gi, '')
-            .trim();
-          
-          // If there's content after the wake word, use it
-          if (cleanedMessage) {
-            setMessage(cleanedMessage);
-          } else {
-            setMessage(transcript); // Keep original if no content after wake word
-          }
+        // If there's content after the wake word, use it
+        if (cleanedMessage) {
+          setMessage(cleanedMessage);
         } else {
-          setMessage(transcript);
+          setMessage(transcript); // Keep original if no content after wake word
         }
         
-        // Check if this is a final result
-        const isFinal = event.results[0].isFinal;
-        
-        if (isFinal) {
-          console.log("✅ Final voice result received");
+        // Auto-submit when Wify wake word is detected
+        if (cleanedMessage.trim()) {
+          console.log("📤 Auto-submitting Wify command:", cleanedMessage);
+          onSendMessage(cleanedMessage);
+          setMessage('');
           
-          // Clear any existing timeout
-          if (autoSubmitTimeoutRef.current) {
-            clearTimeout(autoSubmitTimeoutRef.current);
+          // Stop listening after processing Wify command
+          if (speechRecognitionRef.current) {
+            speechRecognitionRef.current.stop();
           }
-          
-          // Auto-submit voice input after recognition is final
-          autoSubmitTimeoutRef.current = setTimeout(() => {
-            const finalMessage = lowerTranscript.includes('wify') || lowerTranscript.includes('wifi') 
-              ? transcript.replace(/wify|wifi/gi, '').trim() || transcript
-              : transcript;
-              
-            if (finalMessage.trim()) {
-              console.log("📤 Auto-submitting voice message:", finalMessage);
-              onSendMessage(finalMessage);
-              setMessage('');
-            }
-          }, 500);
         }
-      };
+      } else {
+        setMessage(transcript);
+      }
       
-      recognition.onerror = (event) => {
-        console.error('❌ Speech recognition error:', event.error);
-        setIsListening(false);
-        speechRecognitionRef.current = null;
+      // Check if this is a final result for non-Wify commands
+      const isFinal = event.results[0].isFinal;
+      
+      if (isFinal && !lowerTranscript.includes('wify') && !lowerTranscript.includes('wifi')) {
+        console.log("✅ Final voice result received");
         
-        // Show user-friendly error message
-        if (event.error === 'no-speech') {
-          console.log("ℹ️ No speech detected, try speaking louder");
-        } else if (event.error === 'network') {
-          console.log("⚠️ Network error, check your connection");
+        // Clear any existing timeout
+        if (autoSubmitTimeoutRef.current) {
+          clearTimeout(autoSubmitTimeoutRef.current);
         }
-      };
+        
+        // Auto-submit voice input after recognition is final
+        autoSubmitTimeoutRef.current = setTimeout(() => {
+          if (transcript.trim()) {
+            console.log("📤 Auto-submitting voice message:", transcript);
+            onSendMessage(transcript);
+            setMessage('');
+            
+            // Stop listening after processing command
+            if (speechRecognitionRef.current) {
+              speechRecognitionRef.current.stop();
+            }
+          }
+        }, 1000);
+      }
+    };
+    
+    recognition.onerror = (event) => {
+      console.error('❌ Speech recognition error:', event.error);
+      setIsListening(false);
+      speechRecognitionRef.current = null;
+      continuousListeningRef.current = false;
       
-      recognition.onend = () => {
-        console.log("🏁 Voice recognition ended");
-        setIsListening(false);
-        speechRecognitionRef.current = null;
-      };
-      
-      speechRecognitionRef.current = recognition;
-      recognition.start();
+      // Show user-friendly error message
+      if (event.error === 'no-speech') {
+        console.log("ℹ️ No speech detected, try speaking louder");
+      } else if (event.error === 'network') {
+        console.log("⚠️ Network error, check your connection");
+      }
+    };
+    
+    recognition.onend = () => {
+      console.log("🏁 Voice recognition ended");
+      setIsListening(false);
+      speechRecognitionRef.current = null;
+      continuousListeningRef.current = false;
+    };
+    
+    speechRecognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const stopVoiceInput = () => {
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current = null;
+    }
+    setIsListening(false);
+    continuousListeningRef.current = false;
+    console.log("🛑 Voice input stopped");
+  };
+
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      stopVoiceInput();
+    } else {
+      startVoiceInput();
     }
   };
 
@@ -217,7 +233,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="👏 Double clap or say 'Wify' to activate voice, or type here..."
+          placeholder="👏 Clap to wake or say 'Wify' for hands-free, or type here..."
           disabled={isProcessing}
           className="chat-input"
           onFocus={() => setIsFocused(true)}
@@ -230,7 +246,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
             type="button"
             onClick={toggleVoiceInput}
             disabled={isProcessing}
-            className={`voice-button ${isListening ? 'listening' : ''} ${showMicFeedback ? 'clap-activated' : ''}`}
+            className={`voice-button ${isListening ? 'listening' : ''} ${showVoiceFeedback ? 'clap-activated' : ''}`}
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
             title={isListening ? "Click to stop voice input" : "Click to start voice input"}
           >
@@ -249,7 +265,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
         </button>
       </form>
       
-      {/* Clap Detection Status - subtle indicator */}
+      {/* Wake Detection Status */}
       <div style={{
         position: 'absolute',
         bottom: '-20px',
@@ -259,7 +275,7 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
         color: isClapListening ? '#4ade80' : '#ef4444',
         opacity: 0.5
       }}>
-        {isClapListening ? '👏 Clap detection active' : '❌ Clap detection inactive'}
+        {isClapListening ? '🎯 Wake detection active' : '❌ Wake detection inactive'}
       </div>
     </div>
   );
