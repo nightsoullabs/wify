@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { FaPaperPlane, FaHeart, FaMicrophone, FaMicrophoneSlash, FaHandsClapping } from 'react-icons/fa';
+import { FaPaperPlane, FaHeart, FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
+import { FaHandsClapping } from 'react-icons/fa6';
 import { useMicClapDetection } from '../hooks/useMicClapDetection';
 
 export const ChatInput = ({ onSendMessage, isProcessing }) => {
