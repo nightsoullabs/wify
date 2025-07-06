@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
- * Enhanced hook for detecting claps using microphone audio analysis
- * @param {Function} onClapDetected - Callback function when clap is detected
+ * Enhanced hook for detecting double claps using microphone audio analysis
+ * @param {Function} onClapDetected - Callback function when double clap is detected
  * @param {boolean} enabled - Whether the clap detection is enabled
  * @returns {Object} - State and control functions for mic clap detection
  */
 export function useMicClapDetection(onClapDetected, enabled = true) {
   const [isListening, setIsListening] = useState(false);
   const [permission, setPermission] = useState(null);
-  const [clapSensitivity, setClapSensitivity] = useState(0.7); // Adjustable sensitivity
+  const [clapSensitivity, setClapSensitivity] = useState(0.7);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const micStreamRef = useRef(null);
@@ -19,20 +19,22 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
   const lastClapTimeRef = useRef(0);
   const baselineVolumeRef = useRef(0);
   const calibrationSamplesRef = useRef([]);
+  const clapSequenceRef = useRef([]);
   
-  // Enhanced clap detection parameters
-  const CLAP_COOLDOWN = 800; // Minimum time between claps (ms)
-  const VOLUME_HISTORY_SIZE = 10; // Number of volume samples to keep
-  const CALIBRATION_SAMPLES = 30; // Samples for baseline calibration
-  const MIN_CLAP_RATIO = 2.5; // Minimum ratio above baseline for clap detection
-  const SUDDEN_SPIKE_THRESHOLD = 25; // Minimum sudden volume increase
+  // Enhanced double clap detection parameters
+  const CLAP_COOLDOWN = 300; // Minimum time between individual claps (ms)
+  const DOUBLE_CLAP_WINDOW = 800; // Maximum time between claps for double clap (ms)
+  const VOLUME_HISTORY_SIZE = 8;
+  const CALIBRATION_SAMPLES = 25;
+  const MIN_CLAP_RATIO = 2.2;
+  const SUDDEN_SPIKE_THRESHOLD = 20;
   
   // Initialize audio context and analyzer with enhanced settings
   const initAudio = useCallback(async () => {
     try {
       if (!enabled) return;
       
-      console.log("🎤 Initializing enhanced clap detection...");
+      console.log("🎤 Initializing enhanced double clap detection...");
       
       // Request microphone permission with specific constraints
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -55,8 +57,8 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
       microphone.connect(analyser);
       
       // Configure analyzer for clap detection
-      analyser.fftSize = 512; // Increased for better frequency resolution
-      analyser.smoothingTimeConstant = 0.3; // Less smoothing for faster response
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.2;
       analyser.minDecibels = -90;
       analyser.maxDecibels = -10;
       
@@ -73,7 +75,7 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
         startEnhancedListening();
       }, 500);
       
-      console.log("✅ Enhanced clap detection initialized successfully");
+      console.log("✅ Enhanced double clap detection initialized successfully");
     } catch (error) {
       console.error("❌ Error initializing microphone:", error);
       setPermission('denied');
@@ -115,13 +117,9 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
     calibrate();
   }, []);
   
-  // Enhanced clap detection algorithm
-  const detectEnhancedClap = useCallback((currentVolume, frequencyData) => {
+  // Enhanced double clap detection algorithm
+  const detectDoubleClap = useCallback((currentVolume, frequencyData) => {
     const now = Date.now();
-    const timeSinceLastClap = now - lastClapTimeRef.current;
-    
-    // Skip if too soon after last clap
-    if (timeSinceLastClap < CLAP_COOLDOWN) return false;
     
     // Update volume history
     volumeHistoryRef.current.push(currentVolume);
@@ -145,19 +143,49 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
     // Enhanced clap detection criteria
     const isSuddenSpike = volumeIncrease > SUDDEN_SPIKE_THRESHOLD;
     const isAboveBaseline = volumeRatio > MIN_CLAP_RATIO;
-    const isSignificantVolume = currentVolume > 30; // Minimum absolute volume
+    const isSignificantVolume = currentVolume > 25;
     
     // Analyze frequency characteristics for clap-like sounds
     const highFreqEnergy = calculateHighFrequencyEnergy(frequencyData);
-    const isClappyFrequency = highFreqEnergy > 0.3; // Claps have high-frequency content
+    const isClappyFrequency = highFreqEnergy > 0.25;
     
-    // Final clap detection decision
-    const isClap = isSuddenSpike && isAboveBaseline && isSignificantVolume && isClappyFrequency;
+    // Single clap detection
+    const isSingleClap = isSuddenSpike && isAboveBaseline && isSignificantVolume && isClappyFrequency;
     
-    if (isClap) {
-      console.log(`👏 CLAP DETECTED! Volume: ${currentVolume.toFixed(1)}, Increase: ${volumeIncrease.toFixed(1)}, Ratio: ${volumeRatio.toFixed(2)}, HF Energy: ${highFreqEnergy.toFixed(2)}`);
-      lastClapTimeRef.current = now;
-      return true;
+    if (isSingleClap) {
+      const timeSinceLastClap = now - lastClapTimeRef.current;
+      
+      // Only process if enough time has passed since last clap
+      if (timeSinceLastClap > CLAP_COOLDOWN) {
+        console.log(`👏 Single clap detected! Volume: ${currentVolume.toFixed(1)}, Time since last: ${timeSinceLastClap}ms`);
+        
+        // Add clap to sequence
+        clapSequenceRef.current.push(now);
+        
+        // Keep only recent claps (within double clap window)
+        clapSequenceRef.current = clapSequenceRef.current.filter(
+          clapTime => now - clapTime <= DOUBLE_CLAP_WINDOW
+        );
+        
+        // Check for double clap
+        if (clapSequenceRef.current.length >= 2) {
+          const firstClap = clapSequenceRef.current[clapSequenceRef.current.length - 2];
+          const secondClap = clapSequenceRef.current[clapSequenceRef.current.length - 1];
+          const timeBetweenClaps = secondClap - firstClap;
+          
+          if (timeBetweenClaps <= DOUBLE_CLAP_WINDOW && timeBetweenClaps > CLAP_COOLDOWN) {
+            console.log(`👏👏 DOUBLE CLAP DETECTED! Time between claps: ${timeBetweenClaps}ms`);
+            
+            // Clear clap sequence to prevent multiple triggers
+            clapSequenceRef.current = [];
+            lastClapTimeRef.current = now;
+            
+            return true;
+          }
+        }
+        
+        lastClapTimeRef.current = now;
+      }
     }
     
     return false;
@@ -166,7 +194,7 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
   // Calculate high-frequency energy for clap detection
   const calculateHighFrequencyEnergy = useCallback((frequencyData) => {
     const totalBins = frequencyData.length;
-    const highFreqStart = Math.floor(totalBins * 0.6); // Upper 40% of frequency range
+    const highFreqStart = Math.floor(totalBins * 0.6);
     
     let highFreqSum = 0;
     let totalSum = 0;
@@ -181,7 +209,7 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
     return totalSum > 0 ? highFreqSum / totalSum : 0;
   }, []);
   
-  // Enhanced listening loop with improved clap detection
+  // Enhanced listening loop with improved double clap detection
   const startEnhancedListening = useCallback(() => {
     if (!analyserRef.current || !enabled) return;
     
@@ -199,19 +227,19 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
       // Calculate RMS volume for more accurate detection
       let sum = 0;
       for (let i = 0; i < timeData.length; i++) {
-        const sample = (timeData[i] - 128) / 128; // Normalize to -1 to 1
+        const sample = (timeData[i] - 128) / 128;
         sum += sample * sample;
       }
       const rmsVolume = Math.sqrt(sum / timeData.length) * 100;
       
-      // Enhanced clap detection
-      if (detectEnhancedClap(rmsVolume, frequencyData)) {
+      // Enhanced double clap detection
+      if (detectDoubleClap(rmsVolume, frequencyData)) {
         // Visual and audio feedback
-        showClapFeedback();
+        showDoubleClapFeedback();
         
         // Trigger callback
         if (onClapDetected && typeof onClapDetected === 'function') {
-          console.log("🎯 Activating microphone via clap detection!");
+          console.log("🎯 Activating microphone via double clap detection!");
           onClapDetected();
         }
       }
@@ -225,30 +253,32 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
     };
     
     detectLoop();
-  }, [enabled, isListening, onClapDetected, detectEnhancedClap]);
+  }, [enabled, isListening, onClapDetected, detectDoubleClap]);
   
-  // Visual feedback for clap detection
-  const showClapFeedback = useCallback(() => {
+  // Visual feedback for double clap detection
+  const showDoubleClapFeedback = useCallback(() => {
     // Create visual indicator
     const indicator = document.createElement('div');
-    indicator.className = 'clap-detected';
-    indicator.innerHTML = '👏';
+    indicator.className = 'double-clap-detected';
+    indicator.innerHTML = '👏👏';
     indicator.style.cssText = `
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background-color: rgba(255, 215, 0, 0.9);
+      background-color: rgba(255, 215, 0, 0.95);
       border-radius: 50%;
-      width: 80px;
-      height: 80px;
+      width: 120px;
+      height: 120px;
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 9999;
-      font-size: 30px;
-      animation: clapPulse 0.8s ease-out;
+      font-size: 35px;
+      animation: doubleClapPulse 1s ease-out;
       pointer-events: none;
+      box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+      border: 3px solid rgba(255, 255, 255, 0.8);
     `;
     
     document.body.appendChild(indicator);
@@ -258,12 +288,12 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
       if (indicator.parentNode) {
         indicator.parentNode.removeChild(indicator);
       }
-    }, 800);
+    }, 1000);
     
     // Play audio feedback if available
     try {
       const audio = new Audio('/assets/sounds/clap-detected.mp3');
-      audio.volume = 0.3;
+      audio.volume = 0.4;
       audio.play().catch(err => console.warn("Couldn't play clap sound:", err));
     } catch (err) {
       console.warn("Error with clap sound:", err);
@@ -287,17 +317,9 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
     analyserRef.current = null;
     volumeHistoryRef.current = [];
     calibrationSamplesRef.current = [];
+    clapSequenceRef.current = [];
     setIsListening(false);
   }, []);
-  
-  // Toggle listening state
-  const toggleListening = useCallback(() => {
-    if (isListening) {
-      cleanupAudio();
-    } else {
-      initAudio();
-    }
-  }, [isListening, cleanupAudio, initAudio]);
   
   // Adjust sensitivity
   const adjustSensitivity = useCallback((newSensitivity) => {
@@ -323,7 +345,6 @@ export function useMicClapDetection(onClapDetected, enabled = true) {
   return {
     isListening,
     permission,
-    toggleListening,
     adjustSensitivity,
     clapSensitivity
   };

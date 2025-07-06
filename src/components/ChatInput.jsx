@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { FaPaperPlane, FaHeart, FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
-import { FaHandsClapping } from 'react-icons/fa6';
 import { useMicClapDetection } from '../hooks/useMicClapDetection';
 
 export const ChatInput = ({ onSendMessage, isProcessing }) => {
@@ -9,11 +8,10 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
   const [isListening, setIsListening] = useState(false);
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
   const [showMicFeedback, setShowMicFeedback] = useState(false);
-  const [clapDetectionEnabled, setClapDetectionEnabled] = useState(true);
   const autoSubmitTimeoutRef = useRef(null);
   const speechRecognitionRef = useRef(null);
   
-  // Enhanced microphone clap detection handler
+  // Enhanced microphone clap detection handler - always enabled
   const handleMicClapDetected = () => {
     console.log("🎯 Enhanced microphone clap detected!");
     
@@ -66,13 +64,13 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
     }
   };
   
-  // Use enhanced microphone clap detection
+  // Use enhanced microphone clap detection - always enabled
   const { 
     isListening: isClapListening, 
     permission: clapPermission,
     adjustSensitivity,
     clapSensitivity 
-  } = useMicClapDetection(handleMicClapDetected, clapDetectionEnabled);
+  } = useMicClapDetection(handleMicClapDetected, true); // Always enabled
 
   // Check if browser supports speech recognition
   useEffect(() => {
@@ -129,7 +127,26 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
           .join('');
         
         console.log("📝 Voice transcript:", transcript);
-        setMessage(transcript);
+        
+        // Check for "Wify" wake word
+        const lowerTranscript = transcript.toLowerCase();
+        if (lowerTranscript.includes('wify') || lowerTranscript.includes('wifi')) {
+          console.log("🎯 Wify wake word detected!");
+          
+          // Remove wake word from message and clean it up
+          let cleanedMessage = transcript
+            .replace(/wify|wifi/gi, '')
+            .trim();
+          
+          // If there's content after the wake word, use it
+          if (cleanedMessage) {
+            setMessage(cleanedMessage);
+          } else {
+            setMessage(transcript); // Keep original if no content after wake word
+          }
+        } else {
+          setMessage(transcript);
+        }
         
         // Check if this is a final result
         const isFinal = event.results[0].isFinal;
@@ -144,9 +161,13 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
           
           // Auto-submit voice input after recognition is final
           autoSubmitTimeoutRef.current = setTimeout(() => {
-            if (transcript.trim()) {
-              console.log("📤 Auto-submitting voice message:", transcript);
-              onSendMessage(transcript);
+            const finalMessage = lowerTranscript.includes('wify') || lowerTranscript.includes('wifi') 
+              ? transcript.replace(/wify|wifi/gi, '').trim() || transcript
+              : transcript;
+              
+            if (finalMessage.trim()) {
+              console.log("📤 Auto-submitting voice message:", finalMessage);
+              onSendMessage(finalMessage);
               setMessage('');
             }
           }, 500);
@@ -192,22 +213,11 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
   return (
     <div className={`chat-input-container ${isFocused ? 'focused' : ''}`}>
       <form onSubmit={handleSubmit} className="chat-form">
-        {/* Clap Detection Status Indicator */}
-        <button 
-          type="button"
-          onClick={() => setClapDetectionEnabled(!clapDetectionEnabled)}
-          className={`mic-clap-toggle ${clapDetectionEnabled ? 'enabled' : ''}`}
-          title={`Clap detection: ${clapDetectionEnabled ? 'ON' : 'OFF'}`}
-          aria-label="Toggle clap detection"
-        >
-          <FaHandsClapping />
-        </button>
-        
         <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={clapDetectionEnabled ? "👏 Clap to activate voice, or type here..." : "Type your message..."}
+          placeholder="👏 Double clap or say 'Wify' to activate voice, or type here..."
           disabled={isProcessing}
           className="chat-input"
           onFocus={() => setIsFocused(true)}
@@ -239,20 +249,18 @@ export const ChatInput = ({ onSendMessage, isProcessing }) => {
         </button>
       </form>
       
-      {/* Clap Detection Status */}
-      {clapDetectionEnabled && (
-        <div style={{
-          position: 'absolute',
-          bottom: '-25px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          fontSize: '10px',
-          color: isClapListening ? '#4ade80' : '#ef4444',
-          opacity: 0.7
-        }}>
-          {isClapListening ? '👏 Listening for claps...' : '❌ Clap detection inactive'}
-        </div>
-      )}
+      {/* Clap Detection Status - subtle indicator */}
+      <div style={{
+        position: 'absolute',
+        bottom: '-20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        fontSize: '9px',
+        color: isClapListening ? '#4ade80' : '#ef4444',
+        opacity: 0.5
+      }}>
+        {isClapListening ? '👏 Clap detection active' : '❌ Clap detection inactive'}
+      </div>
     </div>
   );
 };
