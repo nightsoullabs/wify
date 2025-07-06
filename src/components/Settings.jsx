@@ -169,33 +169,10 @@ export const Settings = ({ isOpen, onClose }) => {
       </div>
       
       <div className="setting-group">
-        <label htmlFor="gemini-key">Gemini API Key</label>
+        <label htmlFor="gemini-api-key">Gemini API Key</label>
         <div className="api-key-input">
           <input
-            id="gemini-key"
-            type={showKeys.GEMINI_API_KEY ? "text" : "password"}
-            value={apiKeys.GEMINI_API_KEY}
-            onChange={(e) => handleApiKeyChange('GEMINI_API_KEY', e.target.value)}
-            placeholder="AIzaSy..."
-          />
-          <button
-            type="button"
-            onClick={() => toggleShowKey('GEMINI_API_KEY')}
-            className="toggle-visibility"
-          >
-            {showKeys.GEMINI_API_KEY ? <FaEyeSlash /> : <FaEye />}
-          </button>
-        </div>
-        <small className="setting-help">
-          Required for real-time AI responses
-        </small>
-      </div>
-
-      <div className="setting-group">
-        <label htmlFor="gemini-key">Gemini API Key</label>
-        <div className="api-key-input">
-          <input
-            id="gemini-key"
+            id="gemini-api-key"
             type={showKeys.GEMINI_API_KEY ? "text" : "password"}
             value={apiKeys.GEMINI_API_KEY}
             onChange={(e) => handleApiKeyChange('GEMINI_API_KEY', e.target.value)}

@@ -27,20 +27,13 @@ function App() {
 
   // Set default API keys on initial load
   useEffect(() => {
-    // Force the API key to always be set directly
-    localStorage.setItem('GEMINI_API_KEY', 'AIzaSyDQvXK9Lpl1l8RxiG-_ThHCrgCbWCQB5A8');
-    
     const apiKeys = JSON.parse(localStorage.getItem('apiKeys') || '{}');
     
     // Set default YouTube API key if not already set
     if (!apiKeys.youtube) {
       apiKeys.youtube = 'AIzaSyCQbR6x55TRiq6ygvN4z0w4dRRomeBN1Mk';
+      localStorage.setItem('apiKeys', JSON.stringify(apiKeys));
     }
-    
-    // Update Gemini API key to fix API errors - set in both locations to be sure
-    apiKeys.GEMINI_API_KEY = 'AIzaSyDQvXK9Lpl1l8RxiG-_ThHCrgCbWCQB5A8';
-    
-    localStorage.setItem('apiKeys', JSON.stringify(apiKeys));
   }, []);
 
   // Display welcome message on first load

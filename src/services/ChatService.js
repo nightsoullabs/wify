@@ -54,9 +54,11 @@ class ChatService {
 
   // Get API key for the selected provider
   getApiKey(provider) {
+    const apiKeys = JSON.parse(localStorage.getItem('apiKeys') || '{}');
+    
     const apiKeyMap = {
       'gemini': 'GEMINI_API_KEY',
-      'openai': 'OPENAI_API_KEY',
+      'openai': 'openai',
       'groq': 'GROQ_API_KEY',
       'ollama': 'OLLAMA_API_KEY',
       'together': 'TOGETHER_API_KEY',
@@ -66,7 +68,7 @@ class ChatService {
     };
     
     const keyName = apiKeyMap[provider];
-    return localStorage.getItem(keyName);
+    return apiKeys[keyName];
   }
 
   // Process message with selected AI provider
@@ -213,10 +215,8 @@ class ChatService {
   
   // Generate response using Gemini AI
   async generateGeminiResponse(message, petName, context) {
-    // Get API key from localStorage
-    const apiKeys = JSON.parse(localStorage.getItem('apiKeys') || '{}');
-    // Always use the hardcoded API key for now
-    let geminiApiKey = 'AIzaSyDQvXK9Lpl1l8RxiG-_ThHCrgCbWCQB5A8';
+    // Get API key from the getApiKey method
+    const geminiApiKey = this.getApiKey('gemini');
     
     if (!geminiApiKey) {
       console.warn("No Gemini API key found. Using fallback response.");
